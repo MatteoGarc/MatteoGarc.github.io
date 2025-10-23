@@ -185,10 +185,10 @@
             ring.rotation.x = Math.PI / 2;
             compassGroup.add(ring);
             
-            // Cadran blanc
+            // Cadran beige/crème
             const dialGeometry = new THREE.CylinderGeometry(1.8, 1.8, 0.31, 32);
             const dialMaterial = new THREE.MeshPhongMaterial({ 
-                color: 0xf0f0f0,
+                color: 0xe8d7c3,
                 side: THREE.DoubleSide
             });
             const dial = new THREE.Mesh(dialGeometry, dialMaterial);
@@ -210,26 +210,29 @@
                 compassGroup.add(mark);
             }
             
-            // Créer l'aiguille
+            // Créer l'aiguille (horizontale sur la boussole)
             needle = new THREE.Group();
             
-            // Partie nord (rouge)
-            const northGeometry = new THREE.ConeGeometry(0.2, 1.5, 4);
+            // Partie nord (rouge) - pointe vers le nord
+            const northGeometry = new THREE.ConeGeometry(0.15, 1.2, 4);
             const northMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
             const north = new THREE.Mesh(northGeometry, northMaterial);
-            north.position.y = 0.9;
-            north.rotation.x = Math.PI;
+            north.rotation.z = -Math.PI / 2; // Coucher l'aiguille à l'horizontale
+            north.position.x = 0.6;
+            north.position.y = 0.2;
             needle.add(north);
             
-            // Partie sud (blanche)
-            const southGeometry = new THREE.ConeGeometry(0.2, 1.5, 4);
+            // Partie sud (blanche) - pointe vers le sud
+            const southGeometry = new THREE.ConeGeometry(0.15, 1.2, 4);
             const southMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
             const south = new THREE.Mesh(southGeometry, southMaterial);
-            south.position.y = -0.9;
+            south.rotation.z = Math.PI / 2; // Coucher l'aiguille à l'horizontale
+            south.position.x = -0.6;
+            south.position.y = 0.2;
             needle.add(south);
             
             // Centre de l'aiguille
-            const centerGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const centerGeometry = new THREE.SphereGeometry(0.2, 16, 16);
             const centerMaterial = new THREE.MeshPhongMaterial({ 
                 color: 0xd4af37,
                 metalness: 0.8
@@ -238,7 +241,6 @@
             center.position.y = 0.2;
             needle.add(center);
             
-            needle.position.y = 0.2;
             compassGroup.add(needle);
             
             compass = compassGroup;
