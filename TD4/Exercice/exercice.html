@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boussole 3D Augmentée</title>
+    <title>Boussole 3D Nord Réel + Carte</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -22,8 +22,7 @@
         }
 
         #info {
-            position: fixed;
-            top: 20px; left: 50%;
+            position: fixed; top: 20px; left: 50%;
             transform: translateX(-50%);
             background: rgba(0,0,0,0.7);
             color: white;
@@ -84,18 +83,14 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         let scene, camera, renderer, compass, needle;
-        let video = document.getElementById('video');
-        let canvas = document.getElementById('canvas');
-        let permissionBtn = document.getElementById('permissionBtn');
-
-        let userLat = 48.8566, userLon = 2.3522; // par défaut Paris
-        let currentHeading = 0;    // orientation réelle du téléphone
-        let bearingToTarget = 0;   // angle géographique vers la cible
-        let targetHeading = 0;     // angle relatif pour aiguille
+        let currentHeading = 0;       // orientation du téléphone
+        let bearingToTarget = null;   // direction du point sélectionné
+        let targetHeading = 0;        // angle relatif affiché
+        let userLat = 48.8566, userLon = 2.3522;
         let marker = null, map;
         let hasOrientationPermission = false;
 
-        // --- Initialisation caméra ---
+        // --- Caméra arrière ---
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -105,7 +100,7 @@
             }
         }
 
-        // --- Initialisation carte Leaflet ---
+        // --- Carte Leaflet ---
         function initMap() {
             map = L.map('map').setView([userLat, userLon], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -116,7 +111,8 @@
                 const { lat, lng } = e.latlng;
                 if (marker) marker.remove();
                 marker = L.marker([lat, lng]).addTo(map);
-                updateBearingToTarget(lat, lng);
+                bearingToTarget = computeBearing(userLat, userLon, lat, lng);
+                updateRelativeHeading();
             });
 
             if (navigator.geolocation) {
@@ -128,21 +124,23 @@
             }
         }
 
-        // --- Calcul direction vers la cible ---
-        function updateBearingToTarget(lat, lon) {
-            const φ1 = userLat * Math.PI / 180;
-            const φ2 = lat * Math.PI / 180;
-            const Δλ = (lon - userLon) * Math.PI / 180;
+        // --- Calcul direction géographique ---
+        function computeBearing(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
             const y = Math.sin(Δλ) * Math.cos(φ2);
             const x = Math.cos(φ1)*Math.sin(φ2) - Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
-            const θ = Math.atan2(y, x);
-            bearingToTarget = (θ * 180 / Math.PI + 360) % 360;
-            updateRelativeHeading();
+            return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
         }
 
-        // --- Mise à jour de la direction combinée ---
+        // --- Combine orientation et direction ---
         function updateRelativeHeading() {
-            targetHeading = (bearingToTarget - currentHeading + 360) % 360;
+            if (bearingToTarget === null) {
+                targetHeading = (360 - currentHeading) % 360; // nord réel
+            } else {
+                targetHeading = (bearingToTarget - currentHeading + 360) % 360;
+            }
             updateDirectionDisplay(targetHeading);
         }
 
@@ -175,7 +173,7 @@
             }
         }
 
-        // --- Initialisation Three.js ---
+        // --- Three.js ---
         function initThree() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -215,14 +213,18 @@
                 new THREE.ConeGeometry(0.15, 1.2, 4),
                 new THREE.MeshPhongMaterial({ color: 0xff0000 })
             );
-            north.rotation.z = -Math.PI / 2; north.position.x = 0.6; north.position.y = 0.2;
+            north.rotation.z = -Math.PI / 2;
+            north.position.x = 0.6;
+            north.position.y = 0.2;
             needle.add(north);
 
             const south = new THREE.Mesh(
                 new THREE.ConeGeometry(0.15, 1.2, 4),
                 new THREE.MeshPhongMaterial({ color: 0xffffff })
             );
-            south.rotation.z = Math.PI / 2; south.position.x = -0.6; south.position.y = 0.2;
+            south.rotation.z = Math.PI / 2;
+            south.position.x = -0.6;
+            south.position.y = 0.2;
             needle.add(south);
 
             const center = new THREE.Mesh(
@@ -271,7 +273,7 @@
         initThree();
         initMap();
 
-        // Gestion permissions orientation iOS
+        // Permission orientation iOS
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             permissionBtn.style.display = 'block';
             permissionBtn.addEventListener('click', requestOrientationPermission);
