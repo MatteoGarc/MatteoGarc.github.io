@@ -83,14 +83,14 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         let scene, camera, renderer, compass, needle;
-        let currentHeading = 0;       // orientation du téléphone
-        let bearingToTarget = null;   // direction du point sélectionné
-        let targetHeading = 0;        // angle relatif affiché
+        let currentHeading = 0;       // orientation réelle du téléphone
+        let bearingToTarget = null;   // direction du point sélectionné sur la carte
+        let targetHeading = 0;        // angle relatif à afficher
         let userLat = 48.8566, userLon = 2.3522;
         let marker = null, map;
         let hasOrientationPermission = false;
 
-        // --- Caméra arrière ---
+        // --- Initialisation caméra arrière ---
         async function initCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -107,6 +107,7 @@
                 attribution: '© OpenStreetMap'
             }).addTo(map);
 
+            // Clic sur la carte → placer un marqueur et calculer le cap vers la cible
             map.on('click', e => {
                 const { lat, lng } = e.latlng;
                 if (marker) marker.remove();
@@ -115,6 +116,7 @@
                 updateRelativeHeading();
             });
 
+            // Centrer la carte sur la position actuelle si disponible
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     userLat = pos.coords.latitude;
@@ -124,7 +126,7 @@
             }
         }
 
-        // --- Calcul direction géographique ---
+        // --- Calcul direction géographique entre deux points ---
         function computeBearing(lat1, lon1, lat2, lon2) {
             const φ1 = lat1 * Math.PI / 180;
             const φ2 = lat2 * Math.PI / 180;
@@ -134,12 +136,12 @@
             return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
         }
 
-        // --- Combine orientation et direction ---
+        // --- Combine orientation du téléphone et direction vers la cible ---
         function updateRelativeHeading() {
             if (bearingToTarget === null) {
-                targetHeading = (360 - currentHeading) % 360; // nord réel
+                targetHeading = (360 - currentHeading) % 360; // boussole : nord réel
             } else {
-                targetHeading = (bearingToTarget - currentHeading + 360) % 360;
+                targetHeading = (bearingToTarget - currentHeading + 360) % 360; // direction vers la cible
             }
             updateDirectionDisplay(targetHeading);
         }
@@ -173,7 +175,7 @@
             }
         }
 
-        // --- Three.js ---
+        // --- Initialisation de la scène Three.js ---
         function initThree() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -191,15 +193,18 @@
             animate();
         }
 
+        // --- Création de la boussole ---
         function createCompass() {
             const compassGroup = new THREE.Group();
 
+            // Base circulaire
             const base = new THREE.Mesh(
                 new THREE.CylinderGeometry(2, 2, 0.3, 32),
                 new THREE.MeshPhongMaterial({ color: 0x2c3e50, metalness: 0.5, roughness: 0.5 })
             );
             compassGroup.add(base);
 
+            // Anneau doré extérieur
             const ring = new THREE.Mesh(
                 new THREE.TorusGeometry(2.1, 0.15, 16, 32),
                 new THREE.MeshPhongMaterial({ color: 0xd4af37, metalness: 0.8, roughness: 0.2 })
@@ -207,8 +212,10 @@
             ring.rotation.x = Math.PI / 2;
             compassGroup.add(ring);
 
+            // Groupe de l’aiguille
             needle = new THREE.Group();
 
+            // Partie nord (rouge)
             const north = new THREE.Mesh(
                 new THREE.ConeGeometry(0.15, 1.2, 4),
                 new THREE.MeshPhongMaterial({ color: 0xff0000 })
@@ -218,6 +225,7 @@
             north.position.y = 0.2;
             needle.add(north);
 
+            // Partie sud (blanche)
             const south = new THREE.Mesh(
                 new THREE.ConeGeometry(0.15, 1.2, 4),
                 new THREE.MeshPhongMaterial({ color: 0xffffff })
@@ -227,6 +235,7 @@
             south.position.y = 0.2;
             needle.add(south);
 
+            // Centre doré
             const center = new THREE.Mesh(
                 new THREE.SphereGeometry(0.2, 16, 16),
                 new THREE.MeshPhongMaterial({ color: 0xd4af37, metalness: 0.8 })
@@ -236,18 +245,25 @@
 
             compassGroup.add(needle);
             scene.add(compassGroup);
+
+            // ✅ Correction d’alignement : rotation de la boussole entière pour que le nord soit en haut
+            compassGroup.rotation.y = -Math.PI / 2;
+
             compass = compassGroup;
         }
 
+        // --- Animation continue ---
         function animate() {
             requestAnimationFrame(animate);
             if (needle) {
-                const targetRot = (-targetHeading + 90) * Math.PI / 180;
+                // ✅ Rotation corrigée : plus besoin d’un offset artificiel
+                const targetRot = -targetHeading * Math.PI / 180;
                 needle.rotation.y += (targetRot - needle.rotation.y) * 0.1;
             }
             renderer.render(scene, camera);
         }
 
+        // --- Affichage du texte de direction ---
         function updateDirectionDisplay(deg) {
             deg = Math.round(deg);
             document.getElementById('degrees').textContent = deg + '°';
@@ -273,7 +289,7 @@
         initThree();
         initMap();
 
-        // Permission orientation iOS
+        // --- Permissions pour iOS ---
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             permissionBtn.style.display = 'block';
             permissionBtn.addEventListener('click', requestOrientationPermission);
