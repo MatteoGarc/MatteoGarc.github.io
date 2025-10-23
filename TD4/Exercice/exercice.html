@@ -213,8 +213,8 @@
                 new THREE.ConeGeometry(0.15, 1.2, 4),
                 new THREE.MeshPhongMaterial({ color: 0xff0000 })
             );
-            north.rotation.z = -Math.PI / 2;
-            north.position.x = 0.6;
+            north.rotation.z = Math.PI / 2;
+            north.position.x = -0.6;
             north.position.y = 0.2;
             needle.add(north);
 
@@ -222,8 +222,8 @@
                 new THREE.ConeGeometry(0.15, 1.2, 4),
                 new THREE.MeshPhongMaterial({ color: 0xffffff })
             );
-            south.rotation.z = Math.PI / 2;
-            south.position.x = -0.6;
+            south.rotation.z = -Math.PI / 2;
+            south.position.x = 0.6;
             south.position.y = 0.2;
             needle.add(south);
 
@@ -242,7 +242,7 @@
         function animate() {
             requestAnimationFrame(animate);
             if (needle) {
-                const targetRot = -targetHeading * Math.PI / 180;
+                const targetRot = (-targetHeading + 90) * Math.PI / 180;
                 needle.rotation.y += (targetRot - needle.rotation.y) * 0.1;
             }
             renderer.render(scene, camera);
