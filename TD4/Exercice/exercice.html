@@ -141,9 +141,9 @@
             if (bearingToTarget === null) {
                 targetHeading = (360 - currentHeading) % 360; // boussole : nord réel
             } else {
-                targetHeading = (bearingToTarget - currentHeading + 360 - 90) % 360; // direction vers la cible
+                targetHeading = (bearingToTarget - currentHeading + 360) % 360; // direction vers la cible
             }
-            updateDirectionDisplay(targetHeading);
+            updateDirectionDisplay((targetHeading - 90) % 360);
         }
 
         // --- Orientation réelle du téléphone ---
