@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boussole 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        #video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+        
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        
+        #info {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 20px;
+            z-index: 3;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        #direction {
+            font-size: 48px;
+            color: #4CAF50;
+            margin-bottom: 5px;
+        }
+        
+        #degrees {
+            font-size: 18px;
+            color: #ddd;
+        }
+        
+        #error {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 4;
+            display: none;
+            text-align: center;
+            max-width: 80%;
+        }
+        
+        #permissionBtn {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 3;
+            display: none;
+        }
+        
+        #permissionBtn:active {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    
+    <div id="info">
+        <div id="direction">N</div>
+        <div id="degrees">0°</div>
+    </div>
+    
+    <div id="error"></div>
+    <button id="permissionBtn">Activer l'orientation</button>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, compass, needle;
+        let currentHeading = 0;
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let permissionBtn = document.getElementById('permissionBtn');
+        let hasOrientationPermission = false;
+        
+        // Initialiser la caméra vidéo
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                showError("Impossible d'accéder à la caméra: " + err.message);
+            }
+        }
+        
+        // Initialiser Three.js
+        function initThree() {
+            scene = new THREE.Scene();
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0);
+            
+            // Lumières
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+            
+            // Créer la boussole
+            createCompass();
+            
+            // Animation
+            animate();
+        }
+        
+        function createCompass() {
+            const compassGroup = new THREE.Group();
+            
+            // Base de la boussole (cercle)
+            const baseGeometry = new THREE.CylinderGeometry(2, 2, 0.3, 32);
+            const baseMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x2c3e50,
+                metalness: 0.5,
+                roughness: 0.5
+            });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            compassGroup.add(base);
+            
+            // Anneau extérieur
+            const ringGeometry = new THREE.TorusGeometry(2.1, 0.15, 16, 32);
+            const ringMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xd4af37,
+                metalness: 0.8,
+                roughness: 0.2
+            });
+            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.rotation.x = Math.PI / 2;
+            compassGroup.add(ring);
+            
+            // Cadran blanc
+            const dialGeometry = new THREE.CylinderGeometry(1.8, 1.8, 0.31, 32);
+            const dialMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xf0f0f0,
+                side: THREE.DoubleSide
+            });
+            const dial = new THREE.Mesh(dialGeometry, dialMaterial);
+            dial.position.y = 0.01;
+            compassGroup.add(dial);
+            
+            // Marques cardinales (N, S, E, W)
+            const marks = ['N', 'E', 'S', 'W'];
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI / 2);
+                const markGeometry = new THREE.BoxGeometry(0.1, 0.4, 0.1);
+                const markMaterial = new THREE.MeshPhongMaterial({ 
+                    color: i === 0 ? 0xff0000 : 0x333333 
+                });
+                const mark = new THREE.Mesh(markGeometry, markMaterial);
+                mark.position.x = Math.sin(angle) * 1.6;
+                mark.position.z = Math.cos(angle) * 1.6;
+                mark.position.y = 0.2;
+                compassGroup.add(mark);
+            }
+            
+            // Créer l'aiguille
+            needle = new THREE.Group();
+            
+            // Partie nord (rouge)
+            const northGeometry = new THREE.ConeGeometry(0.2, 1.5, 4);
+            const northMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            const north = new THREE.Mesh(northGeometry, northMaterial);
+            north.position.y = 0.9;
+            north.rotation.x = Math.PI;
+            needle.add(north);
+            
+            // Partie sud (blanche)
+            const southGeometry = new THREE.ConeGeometry(0.2, 1.5, 4);
+            const southMaterial = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            const south = new THREE.Mesh(southGeometry, southMaterial);
+            south.position.y = -0.9;
+            needle.add(south);
+            
+            // Centre de l'aiguille
+            const centerGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const centerMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xd4af37,
+                metalness: 0.8
+            });
+            const center = new THREE.Mesh(centerGeometry, centerMaterial);
+            center.position.y = 0.2;
+            needle.add(center);
+            
+            needle.position.y = 0.2;
+            compassGroup.add(needle);
+            
+            compass = compassGroup;
+            scene.add(compass);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotation fluide de l'aiguille
+            if (needle) {
+                const targetRotation = -currentHeading * (Math.PI / 180);
+                needle.rotation.y += (targetRotation - needle.rotation.y) * 0.1;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Gestion de l'orientation
+        function handleOrientation(event) {
+            if (event.alpha !== null) {
+                currentHeading = event.alpha;
+                updateDirectionDisplay(currentHeading);
+            }
+        }
+        
+        function updateDirectionDisplay(degrees) {
+            degrees = Math.round(degrees);
+            document.getElementById('degrees').textContent = degrees + '°';
+            
+            const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            const index = Math.round(degrees / 45) % 8;
+            document.getElementById('direction').textContent = directions[index];
+        }
+        
+        async function requestOrientationPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        hasOrientationPermission = true;
+                        window.addEventListener('deviceorientation', handleOrientation);
+                        permissionBtn.style.display = 'none';
+                    } else {
+                        showError("Permission d'orientation refusée");
+                    }
+                } catch (err) {
+                    showError("Erreur: " + err.message);
+                }
+            } else {
+                // Pour Android et autres
+                hasOrientationPermission = true;
+                window.addEventListener('deviceorientation', handleOrientation);
+                permissionBtn.style.display = 'none';
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        // Gestion du redimensionnement
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Initialisation
+        initCamera();
+        initThree();
+        
+        // Vérifier si on a besoin d'une permission explicite (iOS)
+        if (typeof DeviceOrientationEvent !== 'undefined' && 
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            permissionBtn.style.display = 'block';
+            permissionBtn.addEventListener('click', requestOrientationPermission);
+        } else {
+            // Activer directement pour Android
+            window.addEventListener('deviceorientation', handleOrientation);
+        }
+    </script>
+</body>
+</html>
